@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet -->
+  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -29,30 +29,25 @@
 <div id="map"></div>
 
 <script>
+  // 🔁 GOOGLE SHEET CSV LINK
   const sheetURL = "https://api.allorigins.win/raw?url=https://docs.google.com/spreadsheets/d/1iXBO5Lzd0ymejFICOTbRoSgcldrfcVUAwMhBGJ2KGWA/export?format=csv";
 
-  // MAP INIT
-  const map = L.map('map').setView([-2.99, 104.75], 12);
+  // 🌍 Create Map
+  var map = L.map('map').setView([-2.99, 104.75], 12);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
   let allMarkers = [];
-  let dashboardControl = null;
-
-  function resetStats() {
-    return {
-      total: 0,
-      "DM": 0,
-      "HT": 0,
-      "DM & HT": 0,
-      "TB": 0,
-      "KONDISI LAIN": 0
-    };
-  }
-
-  let stats = resetStats();
+  let stats = {
+    total: 0,
+    "DM": 0,
+    "HT": 0,
+    "DM & HT": 0,
+    "TB": 0,
+    "KONDISI LAIN": 0
+  };
 
   function getPinColor(diagnosis) {
     if (diagnosis === "KONDISI LAIN") return "green";
@@ -74,92 +69,62 @@
     });
   }
 
-  function clearMarkers() {
-    allMarkers.forEach(m => map.removeLayer(m));
-    allMarkers = [];
-    stats = resetStats();
-  }
+  Papa.parse(sheetURL, {
+    download: true,
+    header: true,
+    complete: function(results) {
 
-  function loadData() {
-    clearMarkers();
+      let bounds = [];
 
-    Papa.parse(sheetURL + "&_=" + new Date().getTime(), {
-      download: true,
-      header: true,
-      complete: function(results) {
+      results.data.forEach(row => {
+        if(row.latitude && row.longitude){
 
-        let bounds = [];
+          const lat = parseFloat(row.latitude);
+          const lng = parseFloat(row.longitude);
+          const diagnosis = row.diagnosis?.trim();
+          const pinColor = getPinColor(diagnosis);
 
-        results.data.forEach(row => {
-          if(row.latitude && row.longitude){
+          const marker = L.marker([lat, lng], {
+            icon: createPin(pinColor)
+          }).addTo(map);
 
-            const lat = parseFloat(row.latitude);
-            const lng = parseFloat(row.longitude);
-            const diagnosis = row.diagnosis?.trim();
-            const pinColor = getPinColor(diagnosis);
+          marker.bindPopup(`
+            <b>Nama:</b> ${row.nama}<br>
+            <b>NIK:</b> ${row.NIK}<br>
+            <b>Tanggal Lahir:</b> ${row["tanggal lahir"]}<br>
+            <b>Diagnosis:</b> ${diagnosis}
+          `);
 
-            const marker = L.marker([lat, lng], {
-              icon: createPin(pinColor)
-            }).addTo(map);
+          marker.diagnosis = diagnosis;
+          marker.nama = (row.nama || "").toLowerCase();
+          marker.nik = row.NIK || "";
 
-            marker.bindPopup(`
-              <b>Nama:</b> ${row.nama}<br>
-              <b>NIK:</b> ${row.NIK}<br>
-              <b>Tanggal Lahir:</b> ${row["tanggal lahir"]}<br>
-              <b>Diagnosis:</b> ${diagnosis}
-            `);
+          allMarkers.push(marker);
 
-            marker.diagnosis = diagnosis;
-            marker.nama = (row.nama || "").toLowerCase();
-            marker.nik = row.NIK || "";
-
-            allMarkers.push(marker);
-
-            stats.total++;
-            if(stats[diagnosis] !== undefined){
-              stats[diagnosis]++;
-            }
-
-            bounds.push([lat, lng]);
+          stats.total++;
+          if(stats[diagnosis] !== undefined){
+            stats[diagnosis]++;
           }
-        });
 
-        if(bounds.length > 0){
-          map.fitBounds(bounds);
+          bounds.push([lat, lng]);
         }
+      });
 
-        refreshDashboard();
+      if(bounds.length > 0){
+        map.fitBounds(bounds);
       }
-    });
-  }
 
-  function refreshDashboard() {
-    if(dashboardControl){
-      map.removeControl(dashboardControl);
+      createFilterControl();
+      createSearchControl();
+      createDashboard();
     }
+  });
 
-    dashboardControl = L.control({position: 'bottomleft'});
-    dashboardControl.onAdd = function () {
-      const div = L.DomUtil.create('div', 'control-box');
-      div.innerHTML = `
-        <b>Statistik Pasien</b><br>
-        Total: ${stats.total}<br>
-        DM: ${stats["DM"]}<br>
-        HT: ${stats["HT"]}<br>
-        DM & HT: ${stats["DM & HT"]}<br>
-        TB: ${stats["TB"]}<br>
-        Kondisi Lain: ${stats["KONDISI LAIN"]}
-      `;
-      return div;
-    };
-    dashboardControl.addTo(map);
-  }
-
-  // FILTER
   function createFilterControl() {
-    const control = L.control({position: 'topright'});
+    var control = L.control({position: 'topright'});
+
     control.onAdd = function () {
-      const div = L.DomUtil.create('div', 'control-box');
+      var div = L.DomUtil.create('div', 'control-box');
       div.innerHTML = `
         <b>Filter Diagnosis</b><br>
         <label><input type="checkbox" value="DM" checked> DM</label><br>
@@ -171,30 +136,31 @@
 
       div.querySelectorAll("input").forEach(cb => {
         cb.onchange = function () {
-          const active = Array.from(div.querySelectorAll("input:checked")).map(i => i.value);
+          var active = Array.from(div.querySelectorAll("input:checked")).map(i => i.value);
           allMarkers.forEach(m => {
-            active.includes(m.diagnosis) ? m.addTo(map) : map.removeLayer(m);
+            if(active.includes(m.diagnosis)) m.addTo(map);
+            else map.removeLayer(m);
           });
         };
       });
 
       return div;
     };
+
     control.addTo(map);
   }
 
-  // SEARCH
   function createSearchControl() {
-    const control = L.control({position: 'topleft'});
+    var control = L.control({position: 'topleft'});
+
     control.onAdd = function () {
-      const div = L.DomUtil.create('div', 'control-box');
-      div.innerHTML = `
-        <b>Cari Pasien</b><br>
-        <input type="text" id="searchInput" placeholder="Nama / NIK" style="width:120px;">
-      `;
+      var div = L.DomUtil.create('div', 'control-box');
+      div.innerHTML = `<b>Cari Pasien</b><br>
+        <input type="text" id="searchInput" placeholder="Nama / NIK" style="width:120px;">`;
 
       div.querySelector('#searchInput').addEventListener('keyup', function(e) {
-        const text = e.target.value.toLowerCase();
+        var text = e.target.value.toLowerCase();
+
         allMarkers.forEach(m => {
           if(m.nama.includes(text) || m.nik.includes(text)) {
             map.setView(m.getLatLng(), 15);
@@ -205,17 +171,29 @@
 
       return div;
     };
+
     control.addTo(map);
   }
 
-  // INIT
-  createFilterControl();
-  createSearchControl();
-  loadData();
+  function createDashboard() {
+    var control = L.control({position: 'bottomleft'});
 
-  // 🔁 AUTO UPDATE SETIAP 5 DETIK
-  setInterval(loadData, 5000);
+    control.onAdd = function () {
+      var div = L.DomUtil.create('div', 'control-box');
+      div.innerHTML = `
+        <b>Statistik Pasien</b><br>
+        Total: ${stats.total}<br>
+        DM: ${stats["DM"]}<br>
+        HT: ${stats["HT"]}<br>
+        DM & HT: ${stats["DM & HT"]}<br>
+        TB: ${stats["TB"]}<br>
+        Kondisi Lain: ${stats["KONDISI LAIN"]}
+      `;
+      return div;
+    };
 
+    control.addTo(map);
+  }
 </script>
 
 </body>
