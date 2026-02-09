@@ -29,8 +29,9 @@
 <div id="map"></div>
 
 <script>
-const sheetURL = "https://api.allorigins.win/raw?url=https://docs.google.com/spreadsheets/d/1iXBO5Lzd0ymejFICOTbRoSgcldrfcVUAwMhBGJ2KGWA/export?format=csv";
-
+const sheetURL =
+  "https://docs.google.com/spreadsheets/d/1iXBO5Lzd0ymejFICOTbRoSgcldrfcVUAwMhBGJ2KGWA/export?format=csv";
+  
 var map = L.map('map').setView([-2.99, 104.75], 12);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
